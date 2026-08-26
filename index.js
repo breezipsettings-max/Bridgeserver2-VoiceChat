@@ -14,38 +14,67 @@ wss.on('connection', (ws, req) => {
     ws.room = 'VC';
     ws.isAlive = true;
     
+    if (!activeRooms.has(ws.room)) {
+        activeRooms.set(ws.room, new Set());
+    }
+    activeRooms.get(ws.room).add(ws);
+
     ws.on('pong', () => {
         ws.isAlive = true;
     });
 
     ws.on('message', async (data) => {
         const msgStr = data.toString();
-            
+        
         try {
             const packet = JSON.parse(msgStr);
+
+            if (packet.Room && packet.Room !== ws.room) {
+                const oldRoom = ws.room;
+                if (activeRooms.has(oldRoom)) {
+                    activeRooms.get(oldRoom).delete(ws);
+                    if (activeRooms.get(oldRoom).size === 0) {
+                        activeRooms.delete(oldRoom);
+                    }
+                }
+                
+                ws.room = packet.Room;
+                if (!activeRooms.has(ws.room)) {
+                    activeRooms.set(ws.room, new Set());
+                }
+                activeRooms.get(ws.room).add(ws);
+            }
 
             if (packet.Type === "VoiceChatHandShake") {
                 if (packet.PlayerName) ws.playerName = packet.PlayerName;
                 if (packet.UserId) ws.userId = Number(packet.UserId);
 
-                wss.clients.forEach((client) => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                        client.send(JSON.stringify({
-                            Type: "VoiceChatHandShake",
-                            UserId: packet.UserId,
-                            PlayerName: ws.playerName,
-                        }));
-                    }
-                });
+                const roomClients = activeRooms.get(ws.room);
+                if (roomClients) {
+                    roomClients.forEach((client) => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            client.send(JSON.stringify({
+                                Type: "VoiceChatHandShake",
+                                UserId: packet.UserId,
+                                PlayerName: ws.playerName,
+                                Room: ws.room
+                            }));
+                        }
+                    });
+                }
                 return;
             }
 
-            if (packet.Type === "AudioStateUpdate" || packet.Type === "AudioEmitterSync") {
-                wss.clients.forEach((client) => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                        client.send(msgStr);
-                    }
-                });
+            // Broadcast audio states, UI element updates, and billboard sync packets to everyone else
+            if (packet.Type === "AudioStateUpdate" || packet.Type === "UIStateUpdate" || packet.Type === "AudioEmitterSync") {
+                const roomClients = activeRooms.get(ws.room);
+                if (roomClients) {
+                    roomClients.forEach((client) => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            client.send(msgStr);
+                        }
+                    });
+                }
                 return;
             }
         } catch (e) {
@@ -55,6 +84,12 @@ wss.on('connection', (ws, req) => {
 
     ws.on('close', () => {
         console.log(`Client disconnected: ${ws.playerName || 'Unknown User'}`);
+        if (ws.room && activeRooms.has(ws.room)) {
+            activeRooms.get(ws.room).delete(ws);
+            if (activeRooms.get(ws.room).size === 0) {
+                activeRooms.delete(ws.room);
+            }
+        }
     });
 });
 
