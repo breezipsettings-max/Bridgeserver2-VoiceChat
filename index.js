@@ -12,13 +12,12 @@ wss.on('connection', (ws) => {
     ws.room = 'VC';
     
     ws.on('message', async (data) => {
-        const msg = data.toString();
-        const msgStr = msg;
+        const msgStr = data.toString();
             
-        if (msgStr.includes("VoiceChatHandShake")) {
-            try {
-                const packet = JSON.parse(msgStr);
+        try {
+            const packet = JSON.parse(msgStr);
 
+            if (packet.Type === "VoiceChatHandShake") {
                 if (packet.PlayerName) ws.playerName = packet.PlayerName;
                 if (packet.UserId) ws.userId = Number(packet.UserId);
 
@@ -31,19 +30,29 @@ wss.on('connection', (ws) => {
                         }));
                     }
                 });
-            } catch (e) {
+                return;
+            }
+
+            // Server-side handling and broadcasting for AudioEmitter and AudioDeviceInput updates
+            if (packet.Type === "AudioStateUpdate" || packet.Type === "AudioEmitterSync") {
                 wss.clients.forEach((client) => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
                         client.send(msgStr);
                     }
                 });
+                return;
             }
-            return;
+        } catch (e) {
+            wss.clients.forEach((client) => {
+                if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                    client.send(msgStr);
+                }
+            });
         }
         
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN && client.room === ws.room && ws.room !== "SYSTEM_ONLY") {
-                client.send(msg);
+                client.send(data);
             }
         });
     });
