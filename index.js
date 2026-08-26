@@ -8,9 +8,16 @@ app.use(express.json());
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-wss.on('connection', (ws) => {
+const activeRooms = new Map();
+
+wss.on('connection', (ws, req) => {
     ws.room = 'VC';
+    ws.isAlive = true;
     
+    ws.on('pong', () => {
+        ws.isAlive = true;
+    });
+
     ws.on('message', async (data) => {
         const msgStr = data.toString();
             
@@ -42,9 +49,25 @@ wss.on('connection', (ws) => {
                 return;
             }
         } catch (e) {
-            console.error("Failed to parse incoming packet:", e);
+            console.error("Failed to parse incoming packet data:", e);
         }
     });
+
+    ws.on('close', () => {
+        console.log(`Client disconnected: ${ws.playerName || 'Unknown User'}`);
+    });
+});
+
+const heartbeatInterval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+        if (ws.isAlive === false) return ws.terminate();
+        ws.isAlive = false;
+        ws.ping();
+    });
+}, 30000);
+
+wss.on('close', () => {
+    clearInterval(heartbeatInterval);
 });
 
 const PORT = process.env.PORT || 8080;
