@@ -33,7 +33,6 @@ wss.on('connection', (ws) => {
                 return;
             }
 
-            // Server-side handling and broadcasting for AudioEmitter and AudioDeviceInput updates
             if (packet.Type === "AudioStateUpdate" || packet.Type === "AudioEmitterSync") {
                 wss.clients.forEach((client) => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
@@ -43,18 +42,8 @@ wss.on('connection', (ws) => {
                 return;
             }
         } catch (e) {
-            wss.clients.forEach((client) => {
-                if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                    client.send(msgStr);
-                }
-            });
+            console.error("Failed to parse incoming packet:", e);
         }
-        
-        wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN && client.room === ws.room && ws.room !== "SYSTEM_ONLY") {
-                client.send(data);
-            }
-        });
     });
 });
 
