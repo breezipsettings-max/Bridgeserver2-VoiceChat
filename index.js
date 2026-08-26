@@ -65,8 +65,31 @@ wss.on('connection', (ws, req) => {
                 return;
             }
 
-            // Broadcast audio states, UI element updates, and billboard sync packets to everyone else
-            if (packet.Type === "AudioStateUpdate" || packet.Type === "UIStateUpdate" || packet.Type === "AudioEmitterSync") {
+            if (packet.Type === "AudioStateUpdate") {
+                const roomClients = activeRooms.get(ws.room);
+                if (roomClients) {
+                    roomClients.forEach((client) => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            client.send(msgStr);
+                        }
+                    });
+                }
+                return;
+            }
+
+            if (packet.Type === "AudioEmitterSync") {
+                const roomClients = activeRooms.get(ws.room);
+                if (roomClients) {
+                    roomClients.forEach((client) => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            client.send(msgStr);
+                        }
+                    });
+                }
+                return;
+            }
+
+            if (packet.Type === "UIStateUpdate") {
                 const roomClients = activeRooms.get(ws.room);
                 if (roomClients) {
                     roomClients.forEach((client) => {
