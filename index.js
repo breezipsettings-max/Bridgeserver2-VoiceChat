@@ -5,6 +5,11 @@ const WebSocket = require('ws');
 const app = express();
 app.use(express.json());
 
+// Add this root route so Render and browsers don't throw "Cannot GET /"
+app.get('/', (req, res) => {
+    res.status(200).send('Voice Chat Bridge Server is online and operational, cutie! 💖');
+});
+
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
