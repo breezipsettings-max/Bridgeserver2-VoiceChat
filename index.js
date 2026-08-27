@@ -1,4 +1,4 @@
-// Express and WebSocket server setup with full room echo and broadcasting support!
+// Express and WebSocket server setup with full room echo, binary audio streaming, and broadcasting support!
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -8,7 +8,7 @@ app.use(express.json());
 
 // Add this root route so Render and browsers stay happy and don't throw 404s
 app.get('/', (req, res) => {
-    res.status(200).send('Voice Chat Bridge Server is online and glowing! ✨');
+    res.status(200).send('Voice Chat Bridge Server is online, glowing, and streaming audio! ✨');
 });
 
 const server = http.createServer(app);
@@ -29,7 +29,21 @@ wss.on('connection', (ws, req) => {
         ws.isAlive = true;
     });
 
-    ws.on('message', async (data) => {
+    ws.on('message', async (data, isBinary) => {
+        // Handle raw binary audio chunks (PCM byte streams) and broadcast them to room peers instantly!
+        if (isBinary || Buffer.isBuffer(data)) {
+            const roomClients = activeRooms.get(ws.room);
+            if (roomClients) {
+                roomClients.forEach((client) => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                        client.send(data, { binary: true });
+                    }
+                });
+            }
+            return;
+        }
+
+        // Handle JSON text metadata packets (billboards, mutes, handshakes, colors)
         const msgStr = data.toString();
         
         try {
