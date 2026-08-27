@@ -82,7 +82,7 @@ wss.on('connection', (ws, req) => {
                 return;
             }
 
-            if (packet.Type === "AudioStateUpdate" || packet.Type === "AudioEmitterSync" || packet.Type === "UIStateUpdate" || packet.Type === "AudioSynced") {
+            if (packet.Type === "AudioStateUpdate" || packet.Type === "AudioEmitterSync" || packet.Type === "UIStateUpdate" || packet.Type === "AudioSynced" || packet.Type === "AudioDeviceInputSynced") {
                 const roomClients = activeRooms.get(ws.room);
                 if (roomClients) {
                     roomClients.forEach((client) => {
