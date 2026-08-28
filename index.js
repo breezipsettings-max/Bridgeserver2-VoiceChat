@@ -1,4 +1,5 @@
 // Express and WebSocket server setup with advanced binary audio framing, room echo, and userId tagging!
+// Updated with proper JobId room-routing so multi-instance clients map cleanly! 💅
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -56,7 +57,8 @@ wss.on('connection', (ws, req) => {
         try {
             const packet = JSON.parse(msgStr);
 
-            if (packet.Room && packet.Room !== ws.room) {
+            // FIXED: Automatically maps client JobId to the active server room so packets don't bleed globally!
+            if ((packet.Room || packet.JobId) && (packet.Room || packet.JobId) !== ws.room) {
                 const oldRoom = ws.room;
                 if (activeRooms.has(oldRoom)) {
                     activeRooms.get(oldRoom).delete(ws);
@@ -65,7 +67,7 @@ wss.on('connection', (ws, req) => {
                     }
                 }
                 
-                ws.room = packet.Room;
+                ws.room = packet.Room || packet.JobId;
                 if (!activeRooms.has(ws.room)) {
                     activeRooms.set(ws.room, new Set());
                 }
