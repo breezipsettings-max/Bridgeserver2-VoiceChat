@@ -1,3 +1,4 @@
+// Express and WebSocket server setup with full room echo, binary audio streaming, and broadcasting support!
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -5,8 +6,9 @@ const WebSocket = require('ws');
 const app = express();
 app.use(express.json());
 
+// Add this root route so Render and browsers stay happy and don't throw 404s
 app.get('/', (req, res) => {
-    res.status(200).send('Voice Chat Bridge Server is online');
+    res.status(200).send('Voice Chat Bridge Server is online, glowing, and streaming audio! ✨');
 });
 
 const server = http.createServer(app);
@@ -17,8 +19,6 @@ const activeRooms = new Map();
 wss.on('connection', (ws, req) => {
     ws.room = 'VC';
     ws.isAlive = true;
-    ws.userId = 0; // Default until handshake registration
-    ws.playerName = 'Unknown';
     
     if (!activeRooms.has(ws.room)) {
         activeRooms.set(ws.room, new Set());
@@ -30,34 +30,27 @@ wss.on('connection', (ws, req) => {
     });
 
     ws.on('message', async (data, isBinary) => {
-        // Advanced Binary Audio Stream Handler with Server-Side Header Tagging!
+        // Handle raw binary audio chunks (PCM byte streams) and broadcast them to room peers instantly!
         if (isBinary || Buffer.isBuffer(data)) {
             const roomClients = activeRooms.get(ws.room);
-            if (roomClients && ws.userId) {
-                // Create a 4-byte buffer for the sender's UserId so receivers know who is talking
-                const headerBuf = Buffer.alloc(4);
-                headerBuf.writeUInt32BE(ws.userId, 0);
-                
-                // Combine header + raw audio chunk into a single binary packet
-                const framedPacket = Buffer.concat([headerBuf, data]);
-
+            if (roomClients) {
                 roomClients.forEach((client) => {
                     if (client !== ws && client.readyState === WebSocket.OPEN) {
-                        client.send(framedPacket, { binary: true });
+                        client.send(data, { binary: true });
                     }
                 });
             }
             return;
         }
 
+        // Handle JSON text metadata packets (billboards, mutes, handshakes, colors)
         const msgStr = data.toString();
         
         try {
             const packet = JSON.parse(msgStr);
 
-            // FIXED: Automatically maps client JobId or Room to the active server room cleanly!
-            const targetRoom = packet.Room || packet.JobId;
-            if (targetRoom && targetRoom !== ws.room) {
+            // Handle dynamic room switching if specified in the incoming packet
+            if (packet.Room && packet.Room !== ws.room) {
                 const oldRoom = ws.room;
                 if (activeRooms.has(oldRoom)) {
                     activeRooms.get(oldRoom).delete(ws);
@@ -66,13 +59,14 @@ wss.on('connection', (ws, req) => {
                     }
                 }
                 
-                ws.room = targetRoom;
+                ws.room = packet.Room;
                 if (!activeRooms.has(ws.room)) {
                     activeRooms.set(ws.room, new Set());
                 }
                 activeRooms.get(ws.room).add(ws);
             }
 
+            // Handle Voice Chat Handshakes and broadcast the echo to room peers
             if (packet.Type === "VoiceChatHandShake") {
                 if (packet.PlayerName) ws.playerName = packet.PlayerName;
                 if (packet.UserId) ws.userId = Number(packet.UserId);
@@ -83,7 +77,7 @@ wss.on('connection', (ws, req) => {
                         if (client !== ws && client.readyState === WebSocket.OPEN) {
                             client.send(JSON.stringify({
                                 Type: "VoiceChatHandShake",
-                                UserId: ws.userId,
+                                UserId: packet.UserId,
                                 PlayerName: ws.playerName,
                                 Room: ws.room
                             }));
@@ -93,7 +87,47 @@ wss.on('connection', (ws, req) => {
                 return;
             }
 
-            if (packet.Type === "AudioStateUpdate" || packet.Type === "AudioEmitterSync" || packet.Type === "UIStateUpdate" || packet.Type === "AudioSynced" || packet.Type === "AudioDeviceInputSynced") {
+            // Handle Audio State Updates with room echo broadcast
+            if (packet.Type === "AudioStateUpdate") {
+                const roomClients = activeRooms.get(ws.room);
+                if (roomClients) {
+                    roomClients.forEach((client) => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            client.send(msgStr);
+                        }
+                    });
+                }
+                return;
+            }
+
+            // Handle Audio Emitter Sync with room echo broadcast
+            if (packet.Type === "AudioEmitterSync") {
+                const roomClients = activeRooms.get(ws.room);
+                if (roomClients) {
+                    roomClients.forEach((client) => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            client.send(msgStr);
+                        }
+                    });
+                }
+                return;
+            }
+
+            // Handle UI State Updates (billboards, mutes, colors) with room echo broadcast
+            if (packet.Type === "UIStateUpdate") {
+                const roomClients = activeRooms.get(ws.room);
+                if (roomClients) {
+                    roomClients.forEach((client) => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            client.send(msgStr);
+                        }
+                    });
+                }
+                return;
+            }
+
+            // Handle AudioSynced and AudioDeviceInputSynced packets with room echo broadcast
+            if (packet.Type === "AudioSynced" || packet.Type === "AudioDeviceInputSynced") {
                 const roomClients = activeRooms.get(ws.room);
                 if (roomClients) {
                     roomClients.forEach((client) => {
@@ -122,7 +156,9 @@ wss.on('connection', (ws, req) => {
 
 const heartbeatInterval = setInterval(() => {
     wss.clients.forEach((ws) => {
-        ws.isAlive === false ? ws.terminate() : (ws.isAlive = false, ws.ping());
+        if (ws.isAlive === false) return ws.terminate();
+        ws.isAlive = false;
+        ws.ping();
     });
 }, 30000);
 
