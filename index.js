@@ -1,4 +1,4 @@
-// Express and WebSocket server setup with full room echo, binary audio streaming, and broadcasting support!
+// Express and WebSocket server setup with advanced binary audio framing, room echo, and userId tagging!
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 app.get('/', (req, res) => {
-    res.status(200).send('Voice Chat Bridge Server is online, glowing, and streaming audio! ✨');
+    res.status(200).send('Voice Chat Bridge Server is online, glowing, and streaming audio with binary framing! ✨');
 });
 
 const server = http.createServer(app);
@@ -18,6 +18,8 @@ const activeRooms = new Map();
 wss.on('connection', (ws, req) => {
     ws.room = 'VC';
     ws.isAlive = true;
+    ws.userId = 0; // Default until handshake registration
+    ws.playerName = 'Unknown';
     
     if (!activeRooms.has(ws.room)) {
         activeRooms.set(ws.room, new Set());
@@ -29,12 +31,20 @@ wss.on('connection', (ws, req) => {
     });
 
     ws.on('message', async (data, isBinary) => {
+        // Advanced Binary Audio Stream Handler with Server-Side Header Tagging!
         if (isBinary || Buffer.isBuffer(data)) {
             const roomClients = activeRooms.get(ws.room);
-            if (roomClients) {
+            if (roomClients && ws.userId) {
+                // Create a 4-byte buffer for the sender's UserId so receivers know who is talking
+                const headerBuf = Buffer.alloc(4);
+                headerBuf.writeUInt32BE(ws.userId, 0);
+                
+                // Combine header + raw audio chunk into a single binary packet
+                const framedPacket = Buffer.concat([headerBuf, data]);
+
                 roomClients.forEach((client) => {
                     if (client !== ws && client.readyState === WebSocket.OPEN) {
-                        client.send(data, { binary: true });
+                        client.send(framedPacket, { binary: true });
                     }
                 });
             }
@@ -72,7 +82,7 @@ wss.on('connection', (ws, req) => {
                         if (client !== ws && client.readyState === WebSocket.OPEN) {
                             client.send(JSON.stringify({
                                 Type: "VoiceChatHandShake",
-                                UserId: packet.UserId,
+                                UserId: ws.userId,
                                 PlayerName: ws.playerName,
                                 Room: ws.room
                             }));
@@ -121,5 +131,5 @@ wss.on('close', () => {
 
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
-    console.log(`Server VOICE CHAT (Primary) running on port ${PORT}`);
+    console.log(`Server VOICE CHAT (Primary) running on port ${PORT} with Advanced Binary Audio Framing! ✨`);
 });
