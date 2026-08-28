@@ -1,5 +1,3 @@
-// Express and WebSocket server setup with advanced binary audio framing, room echo, and userId tagging!
-// Updated with proper JobId room-routing so multi-instance clients map cleanly! 💅
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -8,7 +6,7 @@ const app = express();
 app.use(express.json());
 
 app.get('/', (req, res) => {
-    res.status(200).send('Voice Chat Bridge Server is online, glowing, and streaming audio with binary framing! ✨');
+    res.status(200).send('Voice Chat Bridge Server is online');
 });
 
 const server = http.createServer(app);
@@ -57,8 +55,9 @@ wss.on('connection', (ws, req) => {
         try {
             const packet = JSON.parse(msgStr);
 
-            // FIXED: Automatically maps client JobId to the active server room so packets don't bleed globally!
-            if ((packet.Room || packet.JobId) && (packet.Room || packet.JobId) !== ws.room) {
+            // FIXED: Automatically maps client JobId or Room to the active server room cleanly!
+            const targetRoom = packet.Room || packet.JobId;
+            if (targetRoom && targetRoom !== ws.room) {
                 const oldRoom = ws.room;
                 if (activeRooms.has(oldRoom)) {
                     activeRooms.get(oldRoom).delete(ws);
@@ -67,7 +66,7 @@ wss.on('connection', (ws, req) => {
                     }
                 }
                 
-                ws.room = packet.Room || packet.JobId;
+                ws.room = targetRoom;
                 if (!activeRooms.has(ws.room)) {
                     activeRooms.set(ws.room, new Set());
                 }
@@ -133,5 +132,5 @@ wss.on('close', () => {
 
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
-    console.log(`Server VOICE CHAT (Primary) running on port ${PORT} with Advanced Binary Audio Framing! ✨`);
+    console.log(`Server VOICE CHAT (Primary) running on port ${PORT}`);
 });
